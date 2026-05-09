@@ -8,9 +8,10 @@
 # junto con la traza de inferencia paso a paso.
 #
 # Rutas disponibles:
-#   GET  /              -> pagina principal con la interfaz
-#   GET  /api/sintomas  -> lista de todos los sintomas disponibles en la KB
-#   POST /api/inferir   -> ejecuta el motor y retorna el resultado con traza
+#   GET  /               -> pagina principal con la interfaz
+#   GET  /api/sintomas   -> lista de todos los sintomas disponibles en la KB
+#   GET  /api/consecuentes -> lista de todos los consecuentes de la KB
+#   POST /api/inferir    -> ejecuta el motor y retorna el resultado con traza
 # =============================================================================
 
 import sys
@@ -18,28 +19,18 @@ import os
 import json
 from flask import Flask, request, jsonify, render_template_string
 
-# Se agrega la raiz del proyecto al path para poder importar el motor
-# independientemente de desde donde se ejecute este archivo
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.motor_inferencia import MotorInferencia
 
 app = Flask(__name__)
 
-# Ruta al archivo de la base de conocimiento, relativa a la raiz del proyecto
 RUTA_KB = os.path.join(os.path.dirname(__file__), '..', 'base_conocimiento.json')
 
-# Se instancia el motor una sola vez al arrancar el servidor para no
-# recargar el archivo JSON en cada peticion
 motor = MotorInferencia(RUTA_KB)
 
 
 def obtener_sintomas_disponibles():
-    """
-    Recorre todas las reglas de la KB y extrae los terminos que aparecen
-    como antecedentes. Estos son los sintomas que el usuario puede ingresar,
-    a diferencia de los consecuentes que son hechos inferidos por el motor.
-    """
     sintomas = set()
     for regla in motor.reglas:
         for antecedente in regla.antecedentes:
@@ -47,11 +38,6 @@ def obtener_sintomas_disponibles():
     return sorted(list(sintomas))
 
 
-# =============================================================================
-# Plantilla HTML de la interfaz
-# Se define aqui mismo para mantener el proyecto en un solo archivo por modulo
-# y no requerir una carpeta templates separada
-# =============================================================================
 PLANTILLA_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -60,24 +46,29 @@ PLANTILLA_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema Experto de Diagnostico Medico</title>
     <style>
-        /* ------------------------------------------------------------------ */
-        /* Variables y reset general                                           */
-        /* ------------------------------------------------------------------ */
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap');
 
         :root {
-            --bg:         #0a0e1a;
-            --bg-card:    #111827;
-            --bg-hover:   #1a2235;
-            --accent:     #00d4ff;
-            --accent-dim: #0099bb;
-            --success:    #00e5a0;
-            --danger:     #ff4d6d;
-            --warning:    #ffd166;
-            --text:       #e8eaf0;
-            --text-muted: #8892a4;
-            --border:     #1e2d40;
-            --radius:     8px;
+            --bg:          #f4f6fb;
+            --bg-card:     #ffffff;
+            --bg-hover:    #eef1fb;
+            --bg-sidebar:  #ffffff;
+            --accent:      #4f6ef7;
+            --accent-dim:  #3a57d4;
+            --accent-soft: #eef0fe;
+            --success:     #0ea96e;
+            --success-soft:#e6f7f1;
+            --danger:      #e53e5a;
+            --danger-soft: #fdedf0;
+            --warning:     #f59e0b;
+            --text:        #1a1d2e;
+            --text-muted:  #6b7280;
+            --text-light:  #9ca3af;
+            --border:      #e4e8f2;
+            --radius:      10px;
+            --radius-lg:   14px;
+            --shadow-sm:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md:   0 4px 12px rgba(0,0,0,0.08);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -85,49 +76,73 @@ PLANTILLA_HTML = """
         body {
             background: var(--bg);
             color: var(--text);
-            font-family: 'DM Mono', monospace;
+            font-family: 'Inter', sans-serif;
             min-height: 100vh;
+            font-size: 14px;
         }
 
-        /* ------------------------------------------------------------------ */
-        /* Encabezado                                                          */
-        /* ------------------------------------------------------------------ */
+        /* ---- Encabezado ---- */
         header {
+            background: var(--bg-card);
             border-bottom: 1px solid var(--border);
-            padding: 28px 48px;
+            padding: 0 36px;
+            height: 60px;
             display: flex;
-            align-items: baseline;
-            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-sm);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-dot {
+            width: 32px;
+            height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            flex-shrink: 0;
         }
 
         header h1 {
-            font-family: 'DM Serif Display', serif;
-            font-size: 1.6rem;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.2px;
+        }
+
+        .header-badge {
+            background: var(--accent-soft);
             color: var(--accent);
-            letter-spacing: 0.5px;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 3px 10px;
+            border-radius: 20px;
+            letter-spacing: 0.3px;
         }
 
-        header span {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-
-        /* ------------------------------------------------------------------ */
-        /* Layout principal                                                    */
-        /* ------------------------------------------------------------------ */
+        /* ---- Layout ---- */
         main {
             display: grid;
-            grid-template-columns: 380px 1fr;
-            gap: 0;
-            height: calc(100vh - 81px);
+            grid-template-columns: 300px 1fr;
+            height: calc(100vh - 60px);
         }
 
-        /* ------------------------------------------------------------------ */
-        /* Panel izquierdo: seleccion de sintomas                              */
-        /* ------------------------------------------------------------------ */
+        /* ---- Panel izquierdo ---- */
         .panel-sintomas {
+            background: var(--bg-sidebar);
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
@@ -135,16 +150,31 @@ PLANTILLA_HTML = """
         }
 
         .panel-header {
-            padding: 20px 24px 12px;
+            padding: 18px 16px 12px;
             border-bottom: 1px solid var(--border);
         }
 
         .panel-header h2 {
-            font-size: 0.7rem;
-            letter-spacing: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             color: var(--text-muted);
             margin-bottom: 10px;
+        }
+
+        .buscador-wrap {
+            position: relative;
+        }
+
+        .buscador-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-light);
+            font-size: 14px;
+            pointer-events: none;
         }
 
         .buscador {
@@ -152,20 +182,45 @@ PLANTILLA_HTML = """
             background: var(--bg);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            padding: 8px 12px;
+            padding: 8px 12px 8px 32px;
             color: var(--text);
-            font-family: 'DM Mono', monospace;
-            font-size: 0.8rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .buscador:focus { border-color: var(--accent); }
+        .buscador:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(79,110,247,0.1);
+        }
+
+        .contador-seleccionados {
+            padding: 8px 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .contador-badge {
+            background: var(--accent);
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 8px;
+            border-radius: 20px;
+            min-width: 22px;
+            text-align: center;
+        }
 
         .lista-sintomas {
             flex: 1;
             overflow-y: auto;
-            padding: 8px 12px;
+            padding: 6px 8px;
             scrollbar-width: thin;
             scrollbar-color: var(--border) transparent;
         }
@@ -175,31 +230,35 @@ PLANTILLA_HTML = """
             align-items: center;
             gap: 10px;
             padding: 7px 10px;
-            border-radius: var(--radius);
+            border-radius: 8px;
             cursor: pointer;
-            transition: background 0.15s;
-            font-size: 0.78rem;
+            transition: background 0.12s;
+            font-size: 13px;
             color: var(--text-muted);
             user-select: none;
         }
 
-        .item-sintoma:hover { background: var(--bg-hover); color: var(--text); }
+        .item-sintoma:hover {
+            background: var(--bg-hover);
+            color: var(--text);
+        }
 
         .item-sintoma.seleccionado {
-            background: rgba(0, 212, 255, 0.08);
+            background: var(--accent-soft);
             color: var(--accent);
         }
 
-        .item-sintoma .checkbox {
-            width: 14px;
-            height: 14px;
-            border: 1px solid var(--border);
-            border-radius: 3px;
+        .checkbox {
+            width: 16px;
+            height: 16px;
+            border: 1.5px solid var(--border);
+            border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
             transition: all 0.15s;
+            background: white;
         }
 
         .item-sintoma.seleccionado .checkbox {
@@ -209,76 +268,85 @@ PLANTILLA_HTML = """
 
         .item-sintoma.seleccionado .checkbox::after {
             content: '';
-            width: 6px;
-            height: 4px;
-            border-left: 2px solid #000;
-            border-bottom: 2px solid #000;
+            width: 8px;
+            height: 5px;
+            border-left: 2px solid white;
+            border-bottom: 2px solid white;
             transform: rotate(-45deg) translateY(-1px);
             display: block;
         }
 
-        /* ------------------------------------------------------------------ */
-        /* Panel derecho: configuracion y resultado                            */
-        /* ------------------------------------------------------------------ */
+        /* ---- Panel derecho ---- */
         .panel-resultado {
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            background: var(--bg);
         }
 
         .configuracion {
-            padding: 24px 36px;
+            padding: 16px 28px;
+            background: var(--bg-card);
             border-bottom: 1px solid var(--border);
             display: flex;
-            gap: 16px;
+            gap: 12px;
             align-items: flex-end;
+            box-shadow: var(--shadow-sm);
         }
 
         .campo {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
             flex: 1;
         }
 
         .campo label {
-            font-size: 0.65rem;
-            letter-spacing: 2.5px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
             text-transform: uppercase;
             color: var(--text-muted);
         }
 
         .campo input {
-            background: var(--bg-card);
+            background: var(--bg);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 9px 14px;
             color: var(--text);
-            font-family: 'DM Mono', monospace;
-            font-size: 0.82rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .campo input:focus { border-color: var(--accent); }
+        .campo input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(79,110,247,0.1);
+        }
 
         .btn-inferir {
             background: var(--accent);
-            color: #000;
+            color: white;
             border: none;
             border-radius: var(--radius);
-            padding: 10px 28px;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.8rem;
-            font-weight: 500;
+            padding: 10px 24px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
             cursor: pointer;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            transition: background 0.2s, transform 0.1s;
+            letter-spacing: 0.3px;
+            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(79,110,247,0.3);
             white-space: nowrap;
         }
 
-        .btn-inferir:hover { background: var(--accent-dim); }
+        .btn-inferir:hover {
+            background: var(--accent-dim);
+            box-shadow: 0 4px 12px rgba(79,110,247,0.4);
+        }
+
         .btn-inferir:active { transform: scale(0.97); }
 
         .btn-limpiar {
@@ -286,21 +354,69 @@ PLANTILLA_HTML = """
             color: var(--text-muted);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            padding: 10px 20px;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.8rem;
+            padding: 10px 18px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
             cursor: pointer;
-            letter-spacing: 1px;
-            text-transform: uppercase;
             transition: all 0.2s;
             white-space: nowrap;
         }
 
-        .btn-limpiar:hover { border-color: var(--text-muted); color: var(--text); }
+        .btn-limpiar:hover {
+            border-color: var(--text-muted);
+            color: var(--text);
+            background: var(--bg-hover);
+        }
 
-        /* ------------------------------------------------------------------ */
-        /* Area de resultados                                                  */
-        /* ------------------------------------------------------------------ */
+        /* ---- Chips ---- */
+        .chips-bar {
+            padding: 8px 28px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            min-height: 42px;
+        }
+
+        .chips-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-light);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-right: 4px;
+        }
+
+        .chip {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border: 1px solid rgba(79,110,247,0.2);
+            border-radius: 20px;
+            padding: 3px 10px 3px 10px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .chip:hover {
+            background: var(--danger-soft);
+            color: var(--danger);
+            border-color: rgba(229,62,90,0.2);
+        }
+
+        .chip-x {
+            font-size: 11px;
+            opacity: 0.6;
+        }
+
+        /* ---- Area de resultados ---- */
         .area-resultado {
             flex: 1;
             overflow-y: auto;
@@ -309,61 +425,83 @@ PLANTILLA_HTML = """
             scrollbar-color: var(--border) transparent;
         }
 
-        /* Estado inicial */
         .estado-inicial {
             height: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 12px;
-            color: var(--text-muted);
+            gap: 10px;
+            color: var(--text-light);
+            text-align: center;
         }
 
-        .estado-inicial .icono {
-            font-size: 2.5rem;
-            opacity: 0.3;
+        .estado-inicial .icono-grande {
+            width: 56px;
+            height: 56px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 6px;
+            box-shadow: var(--shadow-sm);
         }
 
         .estado-inicial p {
-            font-size: 0.78rem;
-            letter-spacing: 1px;
+            font-size: 13px;
+            max-width: 300px;
+            line-height: 1.6;
         }
 
-        /* Tarjeta de veredicto */
+        /* ---- Veredicto ---- */
         .veredicto {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 16px;
             padding: 20px 24px;
-            border-radius: var(--radius);
-            margin-bottom: 28px;
+            border-radius: var(--radius-lg);
+            margin-bottom: 24px;
             border: 1px solid;
+            box-shadow: var(--shadow-sm);
         }
 
         .veredicto.exito {
-            background: rgba(0, 229, 160, 0.06);
-            border-color: var(--success);
+            background: var(--success-soft);
+            border-color: rgba(14,169,110,0.25);
         }
 
         .veredicto.fracaso {
-            background: rgba(255, 77, 109, 0.06);
-            border-color: var(--danger);
+            background: var(--danger-soft);
+            border-color: rgba(229,62,90,0.25);
         }
 
-        .veredicto .indicador {
-            width: 10px;
-            height: 10px;
+        .veredicto-icon {
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
             flex-shrink: 0;
         }
 
-        .veredicto.exito .indicador { background: var(--success); box-shadow: 0 0 10px var(--success); }
-        .veredicto.fracaso .indicador { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+        .veredicto.exito .veredicto-icon {
+            background: rgba(14,169,110,0.15);
+            color: var(--success);
+        }
+
+        .veredicto.fracaso .veredicto-icon {
+            background: rgba(229,62,90,0.15);
+            color: var(--danger);
+        }
 
         .veredicto .texto h3 {
-            font-family: 'DM Serif Display', serif;
-            font-size: 1.1rem;
+            font-size: 15px;
+            font-weight: 600;
             margin-bottom: 4px;
         }
 
@@ -371,92 +509,41 @@ PLANTILLA_HTML = """
         .veredicto.fracaso .texto h3 { color: var(--danger); }
 
         .veredicto .texto p {
-            font-size: 0.75rem;
+            font-size: 13px;
             color: var(--text-muted);
+            line-height: 1.5;
         }
 
-        /* Seccion de traza */
+        .veredicto .texto p strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        /* ---- Secciones ---- */
         .seccion-titulo {
-            font-size: 0.65rem;
-            letter-spacing: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             color: var(--text-muted);
-            margin-bottom: 14px;
+            margin-bottom: 12px;
             padding-bottom: 8px;
             border-bottom: 1px solid var(--border);
-        }
-
-        .paso-traza {
-            display: grid;
-            grid-template-columns: 60px 1fr 16px 1fr;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: var(--radius);
-            margin-bottom: 6px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            font-size: 0.75rem;
-            transition: border-color 0.2s;
-        }
-
-        .paso-traza:hover { border-color: var(--accent-dim); }
-
-        .paso-traza .id-regla {
-            color: var(--warning);
-            font-weight: 500;
-        }
-
-        .paso-traza .antecedentes {
-            color: var(--text-muted);
-        }
-
-        .paso-traza .flecha {
-            color: var(--border);
-            text-align: center;
-        }
-
-        .paso-traza .consecuente {
-            color: var(--accent);
-            font-weight: 500;
-        }
-
-        /* Chips de sintomas seleccionados */
-        .chips-container {
-            padding: 10px 24px;
-            border-top: 1px solid var(--border);
             display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            min-height: 44px;
             align-items: center;
+            gap: 8px;
         }
 
-        .chip {
-            background: rgba(0, 212, 255, 0.1);
+        .seccion-count {
+            background: var(--bg-hover);
             color: var(--accent);
-            border: 1px solid rgba(0, 212, 255, 0.25);
+            font-size: 10px;
+            font-weight: 600;
+            padding: 1px 8px;
             border-radius: 20px;
-            padding: 3px 10px;
-            font-size: 0.7rem;
-            cursor: pointer;
-            transition: all 0.15s;
         }
 
-        .chip:hover {
-            background: rgba(255, 77, 109, 0.1);
-            color: var(--danger);
-            border-color: rgba(255, 77, 109, 0.25);
-        }
-
-        .chips-label {
-            font-size: 0.65rem;
-            color: var(--text-muted);
-            letter-spacing: 1px;
-            margin-right: 4px;
-        }
-
-        /* Seccion de todos los diagnosticos inferidos */
+        /* ---- Tags de diagnosticos ---- */
         .diagnosticos-grid {
             display: flex;
             flex-wrap: wrap;
@@ -465,26 +552,64 @@ PLANTILLA_HTML = """
         }
 
         .tag-diagnostico {
-            background: rgba(0, 229, 160, 0.08);
+            background: var(--success-soft);
             color: var(--success);
-            border: 1px solid rgba(0, 229, 160, 0.2);
-            border-radius: 4px;
-            padding: 4px 12px;
-            font-size: 0.72rem;
+            border: 1px solid rgba(14,169,110,0.2);
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 500;
         }
 
-        /* Loading */
+        /* ---- Traza ---- */
+        .paso-traza {
+            display: grid;
+            grid-template-columns: 56px 1fr 20px 1fr;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 16px;
+            border-radius: var(--radius);
+            margin-bottom: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            font-size: 13px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .paso-traza:hover {
+            border-color: rgba(79,110,247,0.3);
+            box-shadow: 0 2px 8px rgba(79,110,247,0.08);
+        }
+
+        .id-regla {
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .antecedentes { color: var(--text-muted); font-size: 12px; }
+        .flecha { color: var(--text-light); text-align: center; font-size: 14px; }
+        .consecuente { color: var(--accent); font-weight: 600; font-size: 12px; }
+
+        /* ---- Loading ---- */
         .loading {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             color: var(--text-muted);
-            font-size: 0.78rem;
+            font-size: 13px;
+            padding: 40px 0;
+            justify-content: center;
         }
 
         .spinner {
-            width: 14px;
-            height: 14px;
+            width: 18px;
+            height: 18px;
             border: 2px solid var(--border);
             border-top-color: var(--accent);
             border-radius: 50%;
@@ -493,38 +618,47 @@ PLANTILLA_HTML = """
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        .sin-resultados {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 13px;
+            padding: 24px 0;
+        }
     </style>
 </head>
 <body>
 
 <header>
-    <h1>Sistema Experto de Diagnostico Medico</h1>
-    <span>Forward Chaining &mdash; Logica Proposicional</span>
+    <div class="header-left">
+        <div class="logo-dot">Dx</div>
+        <h1>Sistema Experto de Diagnostico Medico</h1>
+    </div>
+    <span class="header-badge">Forward Chaining</span>
 </header>
 
 <main>
 
-    <!-- Panel izquierdo: sintomas -->
     <div class="panel-sintomas">
         <div class="panel-header">
             <h2>Sintomas del paciente</h2>
-            <input
-                class="buscador"
-                type="text"
-                id="buscador"
-                placeholder="Buscar sintoma..."
-                oninput="filtrarSintomas(this.value)"
-            >
+            <div class="buscador-wrap">
+                <span class="buscador-icon">&#128269;</span>
+                <input
+                    class="buscador"
+                    type="text"
+                    id="buscador"
+                    placeholder="Buscar sintoma..."
+                    oninput="filtrarSintomas(this.value)"
+                >
+            </div>
         </div>
-        <div class="lista-sintomas" id="listaSintomas">
-            <!-- Se llena dinamicamente desde la API -->
+        <div class="contador-seleccionados">
+            <span>Seleccionados</span>
+            <span class="contador-badge" id="contadorBadge">0</span>
         </div>
-        <div class="chips-container" id="chipsContainer">
-            <span class="chips-label">Seleccionados:</span>
-        </div>
+        <div class="lista-sintomas" id="listaSintomas"></div>
     </div>
 
-    <!-- Panel derecho: configuracion y resultado -->
     <div class="panel-resultado">
         <div class="configuracion">
             <div class="campo">
@@ -537,13 +671,19 @@ PLANTILLA_HTML = """
                 >
                 <datalist id="sugerenciasObjetivo"></datalist>
             </div>
-            <button class="btn-inferir" onclick="ejecutarInferencia()">Ejecutar</button>
+            <button class="btn-inferir" onclick="ejecutarInferencia()">Ejecutar motor</button>
             <button class="btn-limpiar" onclick="limpiarTodo()">Limpiar</button>
         </div>
+
+        <div class="chips-bar" id="chipsBar">
+            <span class="chips-label">Sintomas:</span>
+            <span style="font-size:12px; color: var(--text-light);" id="chipsVacio">Ninguno seleccionado</span>
+        </div>
+
         <div class="area-resultado" id="areaResultado">
             <div class="estado-inicial">
-                <div class="icono">&#9636;</div>
-                <p>Selecciona sintomas y define una hipotesis para ejecutar el motor.</p>
+                <div class="icono-grande">&#129657;</div>
+                <p>Selecciona los sintomas del paciente y define una hipotesis para ejecutar el motor de inferencia.</p>
             </div>
         </div>
     </div>
@@ -551,18 +691,14 @@ PLANTILLA_HTML = """
 </main>
 
 <script>
-    // Lista completa de sintomas cargada desde la API
     let todosSintomas = [];
-    // Conjunto de sintomas actualmente seleccionados por el usuario
     let sintomasSeleccionados = new Set();
 
-    // Al cargar la pagina se obtienen los sintomas disponibles desde la KB
     document.addEventListener('DOMContentLoaded', () => {
         cargarSintomas();
         cargarSugerenciasObjetivo();
     });
 
-    // Obtiene la lista de sintomas desde el endpoint de la API
     function cargarSintomas() {
         fetch('/api/sintomas')
             .then(r => r.json())
@@ -572,7 +708,6 @@ PLANTILLA_HTML = """
             });
     }
 
-    // Carga los posibles objetivos (consecuentes de la KB) para el datalist
     function cargarSugerenciasObjetivo() {
         fetch('/api/consecuentes')
             .then(r => r.json())
@@ -586,10 +721,15 @@ PLANTILLA_HTML = """
             });
     }
 
-    // Dibuja los items de sintoma en la lista del panel izquierdo
     function renderizarSintomas(lista) {
         const contenedor = document.getElementById('listaSintomas');
         contenedor.innerHTML = '';
+
+        if (lista.length === 0) {
+            contenedor.innerHTML = '<p class="sin-resultados">No se encontraron sintomas.</p>';
+            return;
+        }
+
         lista.forEach(s => {
             const div = document.createElement('div');
             div.className = 'item-sintoma' + (sintomasSeleccionados.has(s) ? ' seleccionado' : '');
@@ -600,7 +740,6 @@ PLANTILLA_HTML = """
         });
     }
 
-    // Activa o desactiva un sintoma al hacer clic
     function toggleSintoma(sintoma, elemento) {
         if (sintomasSeleccionados.has(sintoma)) {
             sintomasSeleccionados.delete(sintoma);
@@ -610,27 +749,37 @@ PLANTILLA_HTML = """
             elemento.classList.add('seleccionado');
         }
         actualizarChips();
+        actualizarContador();
     }
 
-    // Actualiza los chips de sintomas seleccionados en la parte inferior del panel
+    function actualizarContador() {
+        document.getElementById('contadorBadge').textContent = sintomasSeleccionados.size;
+    }
+
     function actualizarChips() {
-        const contenedor = document.getElementById('chipsContainer');
-        contenedor.innerHTML = '<span class="chips-label">Seleccionados:</span>';
+        const bar = document.getElementById('chipsBar');
+        const vacio = document.getElementById('chipsVacio');
+        bar.innerHTML = '<span class="chips-label">Sintomas:</span>';
+
+        if (sintomasSeleccionados.size === 0) {
+            bar.innerHTML += '<span style="font-size:12px; color: var(--text-light);" id="chipsVacio">Ninguno seleccionado</span>';
+            return;
+        }
+
         sintomasSeleccionados.forEach(s => {
             const chip = document.createElement('span');
             chip.className = 'chip';
-            chip.textContent = s.replace(/_/g, ' ');
-            // Al hacer clic en un chip se deselecciona el sintoma
+            chip.innerHTML = `${s.replace(/_/g, ' ')} <span class="chip-x">x</span>`;
             chip.addEventListener('click', () => {
                 sintomasSeleccionados.delete(s);
                 actualizarChips();
+                actualizarContador();
                 renderizarSintomas(todosSintomas);
             });
-            contenedor.appendChild(chip);
+            bar.appendChild(chip);
         });
     }
 
-    // Filtra los sintomas visibles segun el texto del buscador
     function filtrarSintomas(texto) {
         const filtrados = todosSintomas.filter(s =>
             s.toLowerCase().replace(/_/g, ' ').includes(texto.toLowerCase())
@@ -638,7 +787,6 @@ PLANTILLA_HTML = """
         renderizarSintomas(filtrados);
     }
 
-    // Envia la peticion al motor y muestra el resultado
     function ejecutarInferencia() {
         const objetivo = document.getElementById('inputObjetivo').value.trim();
         const sintomas = Array.from(sintomasSeleccionados);
@@ -652,7 +800,6 @@ PLANTILLA_HTML = """
             return;
         }
 
-        // Se muestra indicador de carga mientras el motor procesa
         document.getElementById('areaResultado').innerHTML =
             '<div class="loading"><div class="spinner"></div><span>Ejecutando motor de inferencia...</span></div>';
 
@@ -666,31 +813,28 @@ PLANTILLA_HTML = """
         .catch(() => mostrarError('Error al conectar con el motor.'));
     }
 
-    // Construye y muestra el panel de resultados con veredicto y traza
     function mostrarResultado(data) {
         const area = document.getElementById('areaResultado');
         const exito = data.resultado;
 
         let html = '';
 
-        // Veredicto principal
         html += `
         <div class="veredicto ${exito ? 'exito' : 'fracaso'}">
-            <div class="indicador"></div>
+            <div class="veredicto-icon">${exito ? '&#10003;' : '&#10007;'}</div>
             <div class="texto">
                 <h3>${exito ? 'Hipotesis confirmada' : 'Hipotesis no derivable'}</h3>
                 <p>
                     ${exito
                         ? `KB |= <strong>${data.objetivo}</strong> es consecuencia logica de los sintomas dados.`
-                        : `No fue posible derivar <strong>${data.objetivo}</strong> con las reglas disponibles y los sintomas dados.`
+                        : `No fue posible derivar <strong>${data.objetivo}</strong> con las reglas disponibles y los sintomas ingresados.`
                     }
                 </p>
             </div>
         </div>`;
 
-        // Diagnosticos intermedios inferidos
         if (data.diagnosticos_inferidos && data.diagnosticos_inferidos.length > 0) {
-            html += `<p class="seccion-titulo">Hechos inferidos durante el proceso</p>`;
+            html += `<p class="seccion-titulo">Hechos inferidos durante el proceso <span class="seccion-count">${data.diagnosticos_inferidos.length}</span></p>`;
             html += `<div class="diagnosticos-grid">`;
             data.diagnosticos_inferidos.forEach(d => {
                 html += `<span class="tag-diagnostico">${d.replace(/_/g, ' ')}</span>`;
@@ -698,9 +842,8 @@ PLANTILLA_HTML = """
             html += `</div>`;
         }
 
-        // Traza de activacion de reglas
         if (data.traza && data.traza.length > 0) {
-            html += `<p class="seccion-titulo">Traza de inferencia &mdash; ${data.traza.length} regla(s) activada(s)</p>`;
+            html += `<p class="seccion-titulo">Traza de inferencia <span class="seccion-count">${data.traza.length} regla(s) activada(s)</span></p>`;
             data.traza.forEach(paso => {
                 const ants = paso.antecedentes.map(a => a.replace(/_/g, ' ')).join(' AND ');
                 const cons = paso.consecuente.replace(/_/g, ' ');
@@ -720,9 +863,9 @@ PLANTILLA_HTML = """
     }
 
     function mostrarError(mensaje) {
-        document.getElementById('areaResultado').innerHTML =
-            `<div class="veredicto fracaso">
-                <div class="indicador"></div>
+        document.getElementById('areaResultado').innerHTML = `
+            <div class="veredicto fracaso">
+                <div class="veredicto-icon">&#10007;</div>
                 <div class="texto"><h3>Error</h3><p>${mensaje}</p></div>
             </div>`;
     }
@@ -731,11 +874,12 @@ PLANTILLA_HTML = """
         sintomasSeleccionados.clear();
         document.getElementById('inputObjetivo').value = '';
         actualizarChips();
+        actualizarContador();
         renderizarSintomas(todosSintomas);
         document.getElementById('areaResultado').innerHTML = `
             <div class="estado-inicial">
-                <div class="icono">&#9636;</div>
-                <p>Selecciona sintomas y define una hipotesis para ejecutar el motor.</p>
+                <div class="icono-grande">&#129657;</div>
+                <p>Selecciona los sintomas del paciente y define una hipotesis para ejecutar el motor de inferencia.</p>
             </div>`;
     }
 </script>
@@ -747,38 +891,23 @@ PLANTILLA_HTML = """
 
 @app.route('/')
 def index():
-    """Sirve la pagina principal de la interfaz."""
     return render_template_string(PLANTILLA_HTML)
 
 
 @app.route('/api/sintomas')
 def api_sintomas():
-    """
-    Retorna la lista de todos los sintomas disponibles en la KB.
-    Estos corresponden a los terminos que aparecen como antecedentes
-    en al menos una regla.
-    """
     sintomas = obtener_sintomas_disponibles()
     return jsonify({"sintomas": sintomas})
 
 
 @app.route('/api/consecuentes')
 def api_consecuentes():
-    """
-    Retorna la lista de todos los consecuentes de la KB.
-    Se usan como sugerencias para el campo de hipotesis en la interfaz.
-    """
     consecuentes = sorted(list(set(r.consecuente for r in motor.reglas)))
     return jsonify({"consecuentes": consecuentes})
 
 
 @app.route('/api/inferir', methods=['POST'])
 def api_inferir():
-    """
-    Recibe sintomas y objetivo, ejecuta el motor de inferencia y retorna
-    el resultado junto con la traza de activacion de reglas y los
-    diagnosticos intermedios inferidos durante el proceso.
-    """
     datos = request.get_json()
     sintomas = datos.get('sintomas', [])
     objetivo = datos.get('objetivo', '')
@@ -786,11 +915,8 @@ def api_inferir():
     if not sintomas or not objetivo:
         return jsonify({"error": "Parametros incompletos"}), 400
 
-    # Se ejecuta el motor con el objetivo especifico
     resultado = motor.ejecutar_inferencia(sintomas, objetivo)
     traza = motor.obtener_traza()
-
-    # Se ejecuta nuevamente sin objetivo para obtener todos los hechos inferidos
     inferidos, _ = motor.obtener_todos_los_diagnosticos(sintomas)
 
     return jsonify({
@@ -802,5 +928,4 @@ def api_inferir():
 
 
 if __name__ == '__main__':
-    # debug=False para produccion; True para desarrollo local
     app.run(debug=True, port=5000)
